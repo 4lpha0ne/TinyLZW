@@ -34,48 +34,47 @@
 use16
 org 100h
 initstack:
-     pop cx         ; 1 clear cx and set stack pointer to 0000 ;)
+     pop cx             ; 1 clear cx and set stack pointer to 0000 ;)
 %if TEST_LZW == 1
-     mov bp, data    
+     mov bp, data
 iterate:
      mov ax, [bp]
      inc bp
      inc bp
-%else    
+%else
+	 xor bp, bp
 iterate:
 readbits:
-     mov ax, 80h    ; 3
-     bt [bx], bp    ; 4
-     inc bp         ; 1
-	 adc ax, ax     ; 2
-     jnc readbits   ; 2 (12 B, simple decoder) 
+     mov ax, 80h        ; 3
+     bt [bitdata], bp   ; 4
+     inc bp             ; 1
+     adc ax, ax         ; 2
+     jnc readbits       ; 2 (12 B, simple decoder) 
 %endif   
-     mov bx, ax     ; 2 store code for later
+     mov bx, ax         ; 2 store code for later
 next:
-     inc cx         ; 1 output count
-     dec ah         ; 2 adjust range and is it a lit code?
-     js lit         ; 2 turned negative -> lit
-     inc ax         ; 1 adjust pointer for correct stack address
-     imul si,ax,-4  ; 3 get index on stack, starting -4 relative
-     ; inc ax         ; 1 shift address by 4 (-> lodsw lodsw)
-     ; jz exit        ; 2 100h -> exit code, doesn't map to some stack entry anyway
-                    ;   -> doesn't work for DOSBox (only from P4 according to qcumba)
-     lodsw          ; 1 C[x]
+     inc cx             ; 1 output count
+     dec ah             ; 2 adjust range and is it a lit code?
+     js lit             ; 2 turned negative -> lit
+     ; inc ax             ; 1 adjust pointer for correct stack address in case of starting at 0fffch
+     imul si,ax,-4      ; 3 get index on stack, starting -4 relative
+     jz exit            ; 2 100h -> exit code, doesn't map to some stack entry anyway
+                        ;   -> doesn't work for DOSBox (only from P4 according to qcumba)
+     lodsw              ; 1 C[x]
 lit:
-     xchg dx, ax    ; 1 save code/lit
-     push dx        ; 1 push for output
-     lodsw          ; 1 V[x] read next code (might be obsolete) SI -> DOESN'T WORK IF NO ADR CALC
-     jns next       ; 2 still set from lit test
+     xchg dx, ax        ; 1 save code/lit
+     push dx            ; 1 push for output
+     lodsw              ; 1 V[x] read next code (might be obsolete) SI -> DOESN'T WORK IF NO ADR CALC
+     jns next           ; 2 still set from lit test
 out:
-     pop ax         ; 1 get output char
-     stosb          ; 1 store last
-     loop out       ; 2
-     pop si         ; 1 go to C[X] pos on stack
-     push dx        ; 1 C[x] (previous)
-     push bx        ; 1 code from above -> V[x+1]
-     push dx        ; 1 C[x+1] next
-     jmp iterate    ; 2 (27 B)
-                    ; ; -> 30+x B
+     pop ax             ; 1 get output char
+     stosb              ; 1 store last
+     loop out           ; 2
+     pop si             ; 1 go to C[X] pos on stack
+     push dx            ; 1 C[x] (previous)
+     push bx            ; 1 code from above -> V[x+1]
+     push dx            ; 1 C[x+1] next
+     jmp iterate        ; 2 (27 B)
 exit:                   
 %if TEST_LZW        
 data:
