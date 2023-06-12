@@ -1,4 +1,10 @@
-; LZW decompressor by Matthias Waldhauer a.k.a. Dresdenboy^Citavia (m.waldhauer@gmx.de)
+; Tiny LZW decompressor in x86 16 bit assembly (NASM format)
+;
+; Copyright by Matthias Waldhauer a.k.a. Dresdenboy^Citavia (m.waldhauer@gmx.de)
+;
+; This code is licensed under a MIT License.
+; 
+; Since this is work in progress, the code might still contain errors in some paths.
 ;
 ; Useable in this form in DOS COM files. In the shortest form the beginning of the PSP
 ; (containing the code to end the program) will be overwritten.
@@ -31,6 +37,8 @@
 ; - C[x] - the corresponding literal following the code in V[x]
 
 %define TEST_LZW 1
+%define P4_IMUL 1       ; i.e. IMUL affects ZF, SF, too
+
 use16
 org 100h
 initstack:
@@ -42,7 +50,7 @@ iterate:
      inc bp
      inc bp
 %else
-	 xor bp, bp
+     xor bp, bp
 iterate:
 readbits:
      mov ax, 80h        ; 3
@@ -57,15 +65,21 @@ next:
      dec ah             ; 2 adjust range and is it a lit code?
      js lit             ; 2 turned negative -> lit
      ; inc ax             ; 1 adjust pointer for correct stack address in case of starting at 0fffch
+%if !P4_IMUL
+     or ax, ax          ; 2 test for 0 (code 100h after dec ah->0), variant: cmp al, <unused val>
+     jz exit            ; 2 done     
+     imul si,ax,-4      ; 3 get index on stack, starting -4 relative
+%else
      imul si,ax,-4      ; 3 get index on stack, starting -4 relative
      jz exit            ; 2 100h -> exit code, doesn't map to some stack entry anyway
-                        ;   -> doesn't work for DOSBox (only from P4 according to qcumba)
+     sahf               ; 1 set flags from AH, which is always in a [0..small n] range in this path
+%endif
      lodsw              ; 1 C[x]
 lit:
      xchg dx, ax        ; 1 save code/lit
      push dx            ; 1 push for output
-     lodsw              ; 1 V[x] read next code (might be obsolete) SI -> DOESN'T WORK IF NO ADR CALC
-     jns next           ; 2 still set from lit test
+     lodsw              ; 1 V[x] read next code (might be obsolete)
+     jns next           ; 2 still set from lit test if not changed by an IMUL
 out:
      pop ax             ; 1 get output char
      stosb              ; 1 store last
