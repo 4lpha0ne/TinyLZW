@@ -1,6 +1,6 @@
 ; Tiny LZW decompressor in x86 16 bit assembly (NASM format)
 ;
-; Copyright by Matthias Waldhauer a.k.a. Dresdenboy^Citavia (m.waldhauer@gmx.de)
+; Copyright (C) by Matthias Waldhauer a.k.a. Dresdenboy^Citavia (m.waldhauer@gmx.de)
 ;
 ; This code is licensed under a MIT License.
 ;
@@ -23,7 +23,9 @@
 ; be used.
 ;
 ; The data should be created with a standard LZW compression, with literals spanning
-; the 00..ffh range and any dictionary reference using values from 100h onward.
+; the 00..ffh range and any dictionary reference using values from 100h onward. Depending
+; on the instructions after the IMUL the decompression ends when receiving a specific
+; code, in this case 100h.
 ;
 ; Optimization variants:
 ; - start the table at SP=0000, overwriting a small part of the PSP with the first C[x-1]
