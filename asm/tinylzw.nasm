@@ -38,9 +38,9 @@
 ; - V[x] - the previous code, which could also be a literal
 ; - C[x] - the corresponding literal following the code in V[x]
 
-%define TEST_LZW 0
+%define TEST_LZW 1
 %define SF_ZF_SET_BY_IMUL 1       ; i.e. IMUL affects ZF, SF, too
-%define UNSAFE 1        ; use unsafe tricks like overwriting a part of the PSP (0000h) to reduce code size
+%define UNSAFE 0        ; use unsafe tricks like overwriting a part of the PSP (0000h) to reduce code size
 
 use16
 org 100h
@@ -51,10 +51,11 @@ start:
      pop cx             ; 1 clear CX and set stack pointer to 0000 ;)
 %else ; UNSAFE == 0
      push bx            ; 1 align stack/table base to 0fffch
-	 xor cx, cx         ; 2 prepare CX for loop
+     xor cx, cx         ; 2 prepare CX for loop
 %endif
 %if TEST_LZW == 1
      mov bp, data
+     mov di, decomp     ;   destination buffer
 .iterate:
      mov ax, [bp]
      inc bp
@@ -70,11 +71,13 @@ start:
      jnc .readbits      ; 2 (12 B, simple decoder)
 %endif
 
-     mov bx, ax         ; 2 store code for later
+     mov bx, ax         ; 2 store code for later - if special case doesn't occur -> push ax, and pop si -> pop bx below
 .next:
      inc cx             ; 1 output count
-     dec ah             ; 2 adjust range and is it a lit code?
-     js .lit            ; 2 turned negative -> lit
+     ;dec ah             ; 2 adjust range and is it a lit code?
+     sub ax, 100h       ; 3 adjust range, test for a literal code, and check for exit code
+     jz exit            ; 2 done: 100h -> exit code, doesn't map to some stack entry anyway
+     js .literal        ; 2 turned negative -> literal
 %if !UNSAFE
      inc ax             ; 1 adjust pointer for correct stack address in case of starting at 0fffch
 %endif
@@ -86,13 +89,13 @@ start:
      dec ax             ; 1 revert increment to test for zero
   %endif
 %endif
-     jz exit           ; 2 done: 100h -> exit code, doesn't map to some stack entry anyway
-                        ;   -> doesn't work for DOSBox (only from P4 according to qkumba)
+     ; jz exit            ; 2 done: 100h -> exit code, doesn't map to some stack entry anyway
+                        ; ;   -> doesn't work for DOSBox (only from P4 according to qkumba)
 %if SF_ZF_SET_BY_IMUL
-     sahf               ; 1 set flags from AH, which is always in a [0..small n] range in this path
+     ; sahf               ; 1 set flags from AH, which is always in a [0..small n] range in this path
 %endif
      lodsw              ; 1 C[x]
-.lit:
+.literal:
      xchg dx, ax        ; 1 save code/lit
      push dx            ; 1 push for output
      lodsw              ; 1 V[x] read next code (might be obsolete)
@@ -107,12 +110,43 @@ start:
      push dx            ; 1 C[x+1] next
      jmp .iterate       ; 2 (27 B)
 exit:
+%if !TEST_LZW
+     ret                ; 1 end program
 
-%if TEST_LZW
-data:
-        ; dw "A", "B", "A", "C", 100h, 102h, "E"
-        dw "A", "A", 101h, 102h, "E"
 %else
+
+     mov si, orig_data
+     mov di, decomp
+     mov cx, msg_fail-orig_data  ; length of orig_data
+     repe cmpsb
+     jne .test_failed
+     mov dx, msg_ok     ; string address
+	 jmp .output
+.test_failed:
+     mov dx, msg_fail   ; string address
+.output:	 
+     mov ah,9           ; function "draw string"
+     int 21h            ; print string
+     mov ah,4Ch		    ; exit to DOS
+     int 21h
+section .data       ; data section   
+        ; dw "A", "B", "A", "C", 100h, 102h, "E"
+        ; dw "A", "A", 101h, 102h, "E"
+data:
+        dw 1, 2, 3, 257, 3, 261, 257, 256   ; 8 values
+orig_data:
+        db 1, 2, 3, 1, 2, 3, 3, 3, 1, 2     ; 10 bytes
+msg_fail:
+        db 'Test failed!',0Dh,0Ah,'$'
+msg_ok:
+        db 'Test OK!',0Dh,0Ah,'$'
+decomp:
+        resb 256                            ; 256 bytes buffer      
+
+%else
+
+section .data       ; data section
 bitdata:
         dw 0E281h, 045C8h, 05C34h, 0
+
 %endif
