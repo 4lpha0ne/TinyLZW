@@ -51,7 +51,7 @@ start:
      pop cx             ; 1 clear CX and set stack pointer to 0000 ;)
 %else ; UNSAFE == 0
      push bx            ; 1 align stack/table base to 0fffch
-     xor cx, cx         ; 2 prepare CX for loop
+     xchg cx, ax        ; 2 prepare CX for loop
 %endif
 %if TEST_LZW == 1
      mov bp, data
@@ -71,6 +71,9 @@ start:
      jnc .readbits      ; 2 (12 B, simple decoder)
 %endif
 
+%if TEST_LZW == 0
+exit equ $+1            ; encoding carries a 0C3h as the second byte
+%endif
      mov bx, ax         ; 2 store code for later - if special case doesn't occur -> push ax, and pop si -> pop bx below
 .next:
      inc cx             ; 1 output count
@@ -109,11 +112,14 @@ start:
      push bx            ; 1 code from above -> V[x+1]
      push dx            ; 1 C[x+1] next
      jmp .iterate       ; 2 (27 B)
-exit:
 %if !TEST_LZW
-     ret                ; 1 end program
+
+section .data       ; data section
+bitdata:
+        dw 0E281h, 045C8h, 05C34h, 0
 
 %else
+exit:
 
      mov si, orig_data
      mov di, decomp
@@ -142,11 +148,5 @@ msg_ok:
         db 'Test OK!',0Dh,0Ah,'$'
 decomp:
         resb 256                            ; 256 bytes buffer      
-
-%else
-
-section .data       ; data section
-bitdata:
-        dw 0E281h, 045C8h, 05C34h, 0
 
 %endif
